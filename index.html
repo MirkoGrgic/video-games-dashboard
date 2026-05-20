@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="hr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Analiza prodaje videoigara</title>
+
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <div class="tooltip" id="tooltip"></div>
+
+  <header class="navbar">
+    <div class="navbar-top">
+      <div class="title-wrap">
+        <h1>Analiza i vizualizacija prodaje videoigara</h1>
+      </div>
+    </div>
+
+    <section class="filters">
+      <div class="custom-select">
+        <label>Žanrovi</label>
+        <button type="button" class="dropdown-button" id="genreButton">
+          <span id="genreButtonText">Sve</span>
+        </button>
+        <div class="dropdown-menu" id="genreMenu"></div>
+      </div>
+
+      <div class="custom-select">
+        <label>Platforme</label>
+        <button type="button" class="dropdown-button" id="platformButton">
+          <span id="platformButtonText">Sve</span>
+        </button>
+        <div class="dropdown-menu" id="platformMenu"></div>
+      </div>
+
+      <div>
+        <label for="yearMin">Od godine</label>
+        <input id="yearMin" type="number" min="1980" max="2016" />
+      </div>
+
+      <div>
+        <label for="yearMax">Do godine</label>
+        <input id="yearMax" type="number" min="1980" max="2016" />
+      </div>
+
+      <div>
+        <label for="sortSelect">Sortiranje bar grafa</label>
+        <select id="sortSelect">
+          <option value="sales-desc">Prodaja silazno</option>
+          <option value="sales-asc">Prodaja uzlazno</option>
+          <option value="name-asc">Naziv A-Z</option>
+          <option value="count-desc">Broj igara silazno</option>
+        </select>
+      </div>
+
+      <button class="primary" id="applyFilters">Primijeni filter</button>
+      <button class="secondary" id="playButton">Pokreni animaciju</button>
+      <button class="reset" id="resetButton">Reset</button>
+    </section>
+  </header>
+
+  <main class="dashboard">
+    <section class="summary-grid">
+      <div class="metric">
+        <div class="label">Broj igara</div>
+        <div class="value" id="metricGames">-</div>
+        <div class="note">nakon aktivnih filtera</div>
+      </div>
+
+      <div class="metric">
+        <div class="label">Globalna prodaja</div>
+        <div class="value" id="metricSales">-</div>
+        <div class="note">u milijunima primjeraka</div>
+      </div>
+
+      <div class="metric">
+        <div class="label">Prosječna user ocjena</div>
+        <div class="value" id="metricUser">-</div>
+        <div class="note">skala 0-10</div>
+      </div>
+
+      <div class="metric">
+        <div class="label">Aktivna godina</div>
+        <div class="value" id="metricYear">Sve</div>
+        <div class="note">mijenja se animacijom</div>
+      </div>
+    </section>
+
+    <section class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">
+          <h2>1. Prodaja po žanru</h2>
+          <p>Stupčasti graf prikazuje ukupnu globalnu prodaju po žanrovima. Klik na stupac filtrira ostale grafove prema odabranom žanru.</p>
+        </div>
+        <div class="chart-actions">
+          Interaktivnost: sortiranje, tooltip, klik-selekcija, tranzicije i D3 enter/update/exit obrazac.
+        </div>
+      </div>
+      <svg id="barChart" viewBox="0 0 1120 430"></svg>
+    </section>
+
+    <section class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">
+          <h2>2. Trend globalne prodaje kroz godine</h2>
+          <p>Linijski graf uspoređuje prodaju kroz vrijeme za odabrane platforme. Brush odabirom raspona godina mijenja sve grafove.</p>
+        </div>
+        <div class="chart-actions">
+          Interaktivnost između grafova: brush raspon godina ažurira bar i scatter graf.
+        </div>
+      </div>
+      <svg id="lineChart" viewBox="0 0 1120 440"></svg>
+      <div class="legend" id="lineLegend"></div>
+      <div class="brush-info" id="brushInfo">Brush: povuci preko linijskog grafa za odabir raspona godina.</div>
+    </section>
+
+    <section class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">
+          <h2>3. Odnos korisničke ocjene i globalne prodaje</h2>
+          <p>Scatter plot istražuje povezanost ocjena korisnika i globalne prodaje. Veličina točke ovisi o ocjeni kritičara.</p>
+        </div>
+        <div class="chart-actions">
+          Višedimenzionalni prikaz: user score, critic score, global sales, platforma, žanr i godina u jednom grafu.
+        </div>
+      </div>
+      <svg id="scatterChart" viewBox="0 0 1120 500"></svg>
+    </section>
+  </main>
+
+  <script>
+const CSV_FILE = "video_games_sales_cleaned.csv";
+
+    const state = {
+      rawData: [],
+      filteredData: [],
+      selectedGenres: [],
+      selectedPlatforms: [],
+      selectedBarGenre: null,
+      selectedYearRange: null,
+      activeAnimationYear: null,
+      animationTimer: null,
+      isPlaying: false
+    };
+
+    const tooltip = d3.select("#tooltip");
+
+    const formatNumber = d3.format(",");
+    const formatSales = d3.format(".1f");
+    const color = d3.scaleOrdinal(d3.schemeTableau10);
+
+    const margin = { top: 28, right: 34, bottom: 72, left: 82 };
+
+    function parseRow(d) {
+      return {
+        name: d.Name,
+        platform: d.Platform,
+        year: +d.Year_of_Release,
+        genre: d.Genre,
+        publisher: d.Publisher,
+        globalSales: +d.Global_Sales,
+        naSales: +d.NA_Sales,
+        euSales: +d.EU_Sales,
+        jpSales: +d.JP_Sales,
+        otherSales: +d.Other_Sales,
+        criticScore: +d.Critic_Score,
+        userScore: +d.User_Score,
+        rating: d.Rating
+      };
+    }
+
+    function uniqueSorted(values) {
+      return Array.from(new Set(values)).sort(d3.ascending);
+    }
+
+    function allGenres() {
+      return uniqueSorted(state.rawData.map(d => d.genre));
+    }
+
+    function allPlatforms() {
+      return uniqueSorted(state.rawData.map(d => d.platform));
+    }
+
+    function isAllSelected(type) {
+      const all = type === "genre" ? allGenres() : allPlatforms();
+      const selected = type === "genre" ? state.selectedGenres : state.selectedPlatforms;
+      return selected.length === all.length;
+    }
+
+    function createCheckboxDropdown(type, values, selectedValues) {
+      const menuId = type === "genre" ? "genreMenu" : "platformMenu";
+      const buttonId = type === "genre" ? "genreButton" : "platformButton";
+      const menu = d3.select(`#${menuId}`);
+
+      menu.html("");
+
+      const allLabel = menu.append("label")
+        .attr("class", "dropdown-option");
+
+      allLabel.append("input")
+        .attr("type", "checkbox")
+        .attr("data-type", type)
+        .attr("data-value", "__all__")
+        .property("checked", selectedValues.length === values.length);
+
+      allLabel.append("span").text("Sve");
+
+      menu.append("div").attr("class", "dropdown-divider");
+
+      const options = menu.selectAll(".dropdown-option-item")
+        .data(values, d => d)
+        .join("label")
+        .attr("class", "dropdown-option dropdown-option-item");
+
+      options.append("input")
+        .attr("type", "checkbox")
+        .attr("data-type", type)
+        .attr("data-value", d => d)
+        .property("checked", d => selectedValues.includes(d));
+
+      options.append("span").text(d => d);
+
+      menu.selectAll("input").on("change", event => {
+        const checkbox = event.currentTarget;
+        const value = checkbox.dataset.value;
+        const fullList = type === "genre" ? allGenres() : allPlatforms();
+
+        if (value === "__all__") {
+          if (type === "genre") {
+            state.selectedGenres = checkbox.checked ? fullList : [];
+          } else {
+            state.selectedPlatforms = checkbox.checked ? fullList : [];
+          }
+        } else {
+          let selected = type === "genre" ? [...state.selectedGenres] : [...state.selectedPlatforms];
+
+          if (checkbox.checked && !selected.includes(value)) {
+            selected.push(value);
+          }
+
+          if (!checkbox.checked) {
+            selected = selected.filter(d => d !== value);
+          }
+
+          if (type === "genre") {
+            state.selectedGenres = selected;
+          } else {
+            state.selectedPlatforms = selected;
+          }
+        }
+
+        updateDropdown(type);
+      });
+
+      d3.select(`#${buttonId}`).on("click", event => {
+        event.stopPropagation();
+        closeDropdowns(menuId);
+        const isOpen = d3.select(`#${menuId}`).classed("open");
+        d3.select(`#${menuId}`).classed("open", !isOpen);
+        d3.select(`#${buttonId}`).classed("active", !isOpen);
+      });
+    }
+
+    function updateDropdown(type) {
+      const values = type === "genre" ? allGenres() : allPlatforms();
+      const selected = type === "genre" ? state.selectedGenres : state.selectedPlatforms;
+      const menuId = type === "genre" ? "genreMenu" : "platformMenu";
+      const buttonTextId = type === "genre" ? "genreButtonText" : "platformButtonText";
+
+      d3.select(`#${menuId}`).selectAll('input[data-value="__all__"]')
+        .property("checked", selected.length === values.length);
+
+      d3.select(`#${menuId}`).selectAll('input:not([data-value="__all__"])')
+        .property("checked", function () {
+          return selected.includes(this.dataset.value);
+        });
+
+      let label;
+      if (selected.length === 0 || selected.length === values.length) {
+        label = "Sve";
+      } else if (selected.length <= 2) {
+        label = selected.join(", ");
+      } else {
+        label = `${selected.length} odabrano`;
+      }
+
+      d3.select(`#${buttonTextId}`).text(label);
+    }
+
+    function closeDropdowns(exceptId = null) {
+      ["genreMenu", "platformMenu"].forEach(id => {
+        if (id !== exceptId) {
+          d3.select(`#${id}`).classed("open", false);
+        }
+      });
+
+      if (exceptId !== "genreMenu") d3.select("#genreButton").classed("active", false);
+      if (exceptId !== "platformMenu") d3.select("#platformButton").classed("active", false);
+    }
+
+    function initControls(data) {
+      const genres = uniqueSorted(data.map(d => d.genre));
+      const platforms = uniqueSorted(data.map(d => d.platform));
+
+      state.selectedGenres = genres;
+      state.selectedPlatforms = platforms;
+
+      createCheckboxDropdown("genre", genres, state.selectedGenres);
+      createCheckboxDropdown("platform", platforms, state.selectedPlatforms);
+      updateDropdown("genre");
+      updateDropdown("platform");
+
+      document.addEventListener("click", () => closeDropdowns());
+
+      const years = d3.extent(data, d => d.year);
+      d3.select("#yearMin").attr("min", years[0]).attr("max", years[1]).property("value", years[0]);
+      d3.select("#yearMax").attr("min", years[0]).attr("max", years[1]).property("value", years[1]);
+
+      d3.select("#applyFilters").on("click", () => {
+        state.selectedBarGenre = null;
+        state.selectedYearRange = null;
+        state.activeAnimationYear = null;
+        applyFiltersAndRender();
+      });
+
+      d3.select("#sortSelect").on("change", () => renderAll());
+
+      d3.select("#playButton").on("click", toggleAnimation);
+      d3.select("#resetButton").on("click", resetDashboard);
+    }
+
+    function applyFiltersAndRender() {
+      closeDropdowns();
+
+      if (state.selectedGenres.length === 0) {
+        state.selectedGenres = allGenres();
+      }
+
+      if (state.selectedPlatforms.length === 0) {
+        state.selectedPlatforms = allPlatforms();
+      }
+
+      updateDropdown("genre");
+      updateDropdown("platform");
+      renderAll();
+    }
+
+    function resetDashboard() {
+      stopAnimation();
+
+      const years = d3.extent(state.rawData, d => d.year);
+      state.selectedGenres = allGenres();
+      state.selectedPlatforms = allPlatforms();
+      state.selectedBarGenre = null;
+      state.selectedYearRange = null;
+      state.activeAnimationYear = null;
+
+      d3.select("#yearMin").property("value", years[0]);
+      d3.select("#yearMax").property("value", years[1]);
+      d3.select("#sortSelect").property("value", "sales-desc");
+      d3.select("#brushInfo").text("Brush: povuci preko linijskog grafa za odabir raspona godina.");
+
+      updateDropdown("genre");
+      updateDropdown("platform");
+      closeDropdowns();
+      renderAll();
+    }
+
+    function getCurrentData() {
+      const yearMin = +d3.select("#yearMin").property("value");
+      const yearMax = +d3.select("#yearMax").property("value");
+
+      let data = state.rawData.filter(d =>
+        state.selectedGenres.includes(d.genre) &&
+        state.selectedPlatforms.includes(d.platform) &&
+        d.year >= yearMin &&
+        d.year <= yearMax
+      );
+
+      if (state.selectedBarGenre) {
+        data = data.filter(d => d.genre === state.selectedBarGenre);
+      }
+
+      if (state.selectedYearRange) {
+        data = data.filter(d => d.year >= state.selectedYearRange[0] && d.year <= state.selectedYearRange[1]);
+      }
+
+      if (state.activeAnimationYear) {
+        data = data.filter(d => d.year <= state.activeAnimationYear);
+      }
+
+      state.filteredData = data;
+      return data;
+    }
+
+    function renderAll() {
+      const data = getCurrentData();
+      updateMetrics(data);
+      renderBarChart(data);
+      renderLineChart(data);
+      renderScatterChart(data);
+    }
+
+    function updateMetrics(data) {
+      const totalSales = d3.sum(data, d => d.globalSales);
+      const avgUser = d3.mean(data, d => d.userScore);
+
+      d3.select("#metricGames").text(formatNumber(data.length));
+      d3.select("#metricSales").text(formatSales(totalSales));
+      d3.select("#metricUser").text(avgUser ? d3.format(".2f")(avgUser) : "-");
+      d3.select("#metricYear").text(state.activeAnimationYear || "Sve");
+    }
+
+    function showTooltip(event, html) {
+      tooltip
+        .style("opacity", 1)
+        .style("left", event.clientX + "px")
+        .style("top", event.clientY + "px")
+        .html(html);
+    }
+
+    function hideTooltip() {
+      tooltip.style("opacity", 0);
+    }
+
+    function renderBarChart(data) {
+      const svg = d3.select("#barChart");
+      const width = 1120;
+      const height = 430;
+      const innerWidth = width - margin.left - margin.right;
+      const innerHeight = height - margin.top - margin.bottom;
+
+      const g = svg.selectAll(".bar-root")
+        .data([null])
+        .join("g")
+        .attr("class", "bar-root")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+
+      const grouped = d3.rollups(
+        data,
+        v => ({
+          sales: d3.sum(v, d => d.globalSales),
+          count: v.length,
+          avgUser: d3.mean(v, d => d.userScore)
+        }),
+        d => d.genre
+      ).map(([genre, values]) => ({ genre, ...values }));
+
+      const sortMode = d3.select("#sortSelect").property("value");
+
+      if (sortMode === "sales-desc") grouped.sort((a, b) => d3.descending(a.sales, b.sales));
+      if (sortMode === "sales-asc") grouped.sort((a, b) => d3.ascending(a.sales, b.sales));
+      if (sortMode === "name-asc") grouped.sort((a, b) => d3.ascending(a.genre, b.genre));
+      if (sortMode === "count-desc") grouped.sort((a, b) => d3.descending(a.count, b.count));
+
+      const x = d3.scaleBand()
+        .domain(grouped.map(d => d.genre))
+        .range([0, innerWidth])
+        .padding(0.22);
+
+      const y = d3.scaleLinear()
+        .domain([0, d3.max(grouped, d => d.sales) || 1])
+        .nice()
+        .range([innerHeight, 0]);
+
+      g.selectAll(".grid-y")
+        .data([null])
+        .join("g")
+        .attr("class", "grid grid-y")
+        .transition()
+        .duration(700)
+        .call(d3.axisLeft(y).tickSize(-innerWidth).tickFormat(""));
+
+      g.selectAll(".x-axis")
+        .data([null])
+        .join("g")
+        .attr("class", "axis x-axis")
+        .attr("transform", `translate(0,${innerHeight})`)
+        .transition()
+        .duration(700)
+        .call(d3.axisBottom(x))
+        .selection()
+        .selectAll("text")
+        .attr("transform", "rotate(-35)")
+        .style("text-anchor", "end");
+
+      g.selectAll(".y-axis")
+        .data([null])
+        .join("g")
+        .attr("class", "axis y-axis")
+        .transition()
+        .duration(700)
+        .call(d3.axisLeft(y).ticks(7));
+
+      g.selectAll(".y-label")
+        .data([null])
+        .join("text")
+        .attr("class", "y-label")
+        .attr("x", -innerHeight / 2)
+        .attr("y", -58)
+        .attr("transform", "rotate(-90)")
+        .attr("text-anchor", "middle")
+        .attr("fill", "#667085")
+        .attr("font-size", 13)
+        .text("Globalna prodaja, milijuni");
+
+      const bars = g.selectAll(".bar")
+        .data(grouped, d => d.genre);
+
+      bars.exit()
+        .transition()
+        .duration(500)
+        .attr("y", innerHeight)
+        .attr("height", 0)
+        .style("opacity", 0)
+        .remove();
+
+      bars.enter()
+        .append("rect")
+        .attr("class", "bar")
+        .attr("x", d => x(d.genre))
+        .attr("y", innerHeight)
+        .attr("width", x.bandwidth())
+        .attr("height", 0)
+        .attr("rx", 8)
+        .attr("fill", d => color(d.genre))
+        .on("mousemove", (event, d) => showTooltip(event, `
+          <strong>${d.genre}</strong><br/>
+          Prodaja: ${formatSales(d.sales)} mil.<br/>
+          Broj igara: ${formatNumber(d.count)}<br/>
+          Prosj. user score: ${d3.format(".2f")(d.avgUser)}
+        `))
+        .on("mouseleave", hideTooltip)
+        .on("click", (event, d) => {
+          state.selectedBarGenre = state.selectedBarGenre === d.genre ? null : d.genre;
+          renderAll();
+        })
+        .merge(bars)
+        .classed("selected", d => state.selectedBarGenre === d.genre)
+        .classed("faded", d => state.selectedBarGenre && state.selectedBarGenre !== d.genre)
+        .transition()
+        .duration(850)
+        .attr("x", d => x(d.genre))
+        .attr("y", d => y(d.sales))
+        .attr("width", x.bandwidth())
+        .attr("height", d => innerHeight - y(d.sales))
+        .attr("fill", d => color(d.genre));
+    }
+
+    function renderLineChart(data) {
+      const svg = d3.select("#lineChart");
+      const width = 1120;
+      const height = 440;
+      const innerWidth = width - margin.left - margin.right;
+      const innerHeight = height - margin.top - margin.bottom;
+
+      const g = svg.selectAll(".line-root")
+        .data([null])
+        .join("g")
+        .attr("class", "line-root")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+
+      const years = d3.extent(state.rawData, d => d.year);
+      const x = d3.scaleLinear()
+        .domain(years)
+        .range([0, innerWidth]);
+
+      const platforms = state.selectedPlatforms;
+
+      const series = platforms.map(platform => {
+        const values = d3.rollups(
+          data.filter(d => d.platform === platform),
+          v => d3.sum(v, d => d.globalSales),
+          d => d.year
+        )
+        .map(([year, sales]) => ({ year: +year, sales }))
+        .sort((a, b) => d3.ascending(a.year, b.year));
+
+        return { platform, values };
+      }).filter(s => s.values.length > 0);
+
+      const maxSales = d3.max(series, s => d3.max(s.values, d => d.sales)) || 1;
+
+      const y = d3.scaleLinear()
+        .domain([0, maxSales])
+        .nice()
+        .range([innerHeight, 0]);
+
+      g.selectAll(".grid-y")
+        .data([null])
+        .join("g")
+        .attr("class", "grid grid-y")
+        .transition()
+        .duration(700)
+        .call(d3.axisLeft(y).tickSize(-innerWidth).tickFormat(""));
+
+      g.selectAll(".x-axis")
+        .data([null])
+        .join("g")
+        .attr("class", "axis x-axis")
+        .attr("transform", `translate(0,${innerHeight})`)
+        .transition()
+        .duration(700)
+        .call(d3.axisBottom(x).tickFormat(d3.format("d")));
+
+      g.selectAll(".y-axis")
+        .data([null])
+        .join("g")
+        .attr("class", "axis y-axis")
+        .transition()
+        .duration(700)
+        .call(d3.axisLeft(y).ticks(7));
+
+      g.selectAll(".y-label")
+        .data([null])
+        .join("text")
+        .attr("class", "y-label")
+        .attr("x", -innerHeight / 2)
+        .attr("y", -58)
+        .attr("transform", "rotate(-90)")
+        .attr("text-anchor", "middle")
+        .attr("fill", "#667085")
+        .attr("font-size", 13)
+        .text("Globalna prodaja, milijuni");
+
+      const line = d3.line()
+        .defined(d => Number.isFinite(d.sales))
+        .x(d => x(d.year))
+        .y(d => y(d.sales))
+        .curve(d3.curveMonotoneX);
+
+      const paths = g.selectAll(".line-path")
+        .data(series, d => d.platform);
+
+      paths.exit()
+        .transition()
+        .duration(500)
+        .style("opacity", 0)
+        .remove();
+
+      paths.enter()
+        .append("path")
+        .attr("class", "line-path")
+        .attr("fill", "none")
+        .attr("stroke-width", 3)
+        .attr("stroke", d => color(d.platform))
+        .attr("d", d => line(d.values))
+        .style("opacity", 0)
+        .on("mousemove", (event, d) => {
+          const total = d3.sum(d.values, v => v.sales);
+          showTooltip(event, `<strong>${d.platform}</strong><br/>Ukupna prodaja u prikazu: ${formatSales(total)} mil.`);
+        })
+        .on("mouseleave", hideTooltip)
+        .merge(paths)
+        .transition()
+        .duration(900)
+        .style("opacity", 1)
+        .attr("stroke", d => color(d.platform))
+        .attr("d", d => line(d.values));
+
+      const dotsData = series.flatMap(s => s.values.map(v => ({ ...v, platform: s.platform })));
+
+      const dots = g.selectAll(".line-dot")
+        .data(dotsData, d => `${d.platform}-${d.year}`);
+
+      dots.exit()
+        .transition()
+        .duration(400)
+        .attr("r", 0)
+        .remove();
+
+      dots.enter()
+        .append("circle")
+        .attr("class", "line-dot")
+        .attr("cx", d => x(d.year))
+        .attr("cy", d => y(d.sales))
+        .attr("r", 0)
+        .attr("fill", d => color(d.platform))
+        .on("mousemove", (event, d) => showTooltip(event, `
+          <strong>${d.platform}</strong><br/>
+          Godina: ${d.year}<br/>
+          Prodaja: ${formatSales(d.sales)} mil.
+        `))
+        .on("mouseleave", hideTooltip)
+        .merge(dots)
+        .transition()
+        .duration(700)
+        .attr("cx", d => x(d.year))
+        .attr("cy", d => y(d.sales))
+        .attr("r", 4);
+
+      const brush = d3.brushX()
+        .extent([[0, 0], [innerWidth, innerHeight]])
+        .on("end", event => {
+          if (!event.selection) {
+            state.selectedYearRange = null;
+            d3.select("#brushInfo").text("Brush: povuci preko linijskog grafa za odabir raspona godina.");
+            renderAll();
+            return;
+          }
+
+          const [x0, x1] = event.selection.map(x.invert);
+          const from = Math.max(years[0], Math.round(x0));
+          const to = Math.min(years[1], Math.round(x1));
+
+          state.selectedYearRange = [from, to];
+          d3.select("#brushInfo").text(`Aktivni brush raspon: ${from} - ${to}. Dvoklik ili prazan klik briše brush.`);
+          renderAll();
+        });
+
+      g.selectAll(".brush")
+        .data([null])
+        .join("g")
+        .attr("class", "brush")
+        .call(brush)
+        .on("dblclick", () => {
+          state.selectedYearRange = null;
+          g.select(".brush").call(brush.move, null);
+          d3.select("#brushInfo").text("Brush: povuci preko linijskog grafa za odabir raspona godina.");
+          renderAll();
+        });
+
+      renderLegend(series.map(d => d.platform));
+    }
+
+    function renderLegend(platforms) {
+      const legend = d3.select("#lineLegend");
+
+      const items = legend.selectAll(".legend-item")
+        .data(platforms, d => d);
+
+      items.exit().remove();
+
+      const enter = items.enter()
+        .append("span")
+        .attr("class", "legend-item");
+
+      enter.append("span")
+        .attr("class", "legend-color");
+
+      enter.append("span")
+        .attr("class", "legend-label");
+
+      enter.merge(items)
+        .select(".legend-color")
+        .style("background", d => color(d));
+
+      enter.merge(items)
+        .select(".legend-label")
+        .text(d => d);
+    }
+
+    function renderScatterChart(data) {
+      const svg = d3.select("#scatterChart");
+      const width = 1120;
+      const height = 500;
+      const innerWidth = width - margin.left - margin.right;
+      const innerHeight = height - margin.top - margin.bottom;
+
+      const g = svg.selectAll(".scatter-root")
+        .data([null])
+        .join("g")
+        .attr("class", "scatter-root")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+
+      const sample = data
+        .filter(d => Number.isFinite(d.userScore) && Number.isFinite(d.globalSales) && d.globalSales > 0)
+        .sort((a, b) => d3.descending(a.globalSales, b.globalSales))
+        .slice(0, 900);
+
+      const x = d3.scaleLinear()
+        .domain([0, 10])
+        .range([0, innerWidth]);
+
+      const y = d3.scaleLog()
+        .domain([0.01, d3.max(sample, d => d.globalSales) || 1])
+        .range([innerHeight, 0])
+        .nice();
+
+      const r = d3.scaleSqrt()
+        .domain(d3.extent(sample, d => d.criticScore))
+        .range([4, 16]);
+
+      g.selectAll(".grid-y")
+        .data([null])
+        .join("g")
+        .attr("class", "grid grid-y")
+        .transition()
+        .duration(700)
+        .call(d3.axisLeft(y).ticks(7, "~s").tickSize(-innerWidth).tickFormat(""));
+
+      g.selectAll(".x-axis")
+        .data([null])
+        .join("g")
+        .attr("class", "axis x-axis")
+        .attr("transform", `translate(0,${innerHeight})`)
+        .transition()
+        .duration(700)
+        .call(d3.axisBottom(x).ticks(10));
+
+      g.selectAll(".y-axis")
+        .data([null])
+        .join("g")
+        .attr("class", "axis y-axis")
+        .transition()
+        .duration(700)
+        .call(d3.axisLeft(y).ticks(7, "~s"));
+
+      g.selectAll(".x-label")
+        .data([null])
+        .join("text")
+        .attr("class", "x-label")
+        .attr("x", innerWidth / 2)
+        .attr("y", innerHeight + 52)
+        .attr("text-anchor", "middle")
+        .attr("fill", "#667085")
+        .attr("font-size", 13)
+        .text("Korisnička ocjena, 0-10");
+
+      g.selectAll(".y-label")
+        .data([null])
+        .join("text")
+        .attr("class", "y-label")
+        .attr("x", -innerHeight / 2)
+        .attr("y", -58)
+        .attr("transform", "rotate(-90)")
+        .attr("text-anchor", "middle")
+        .attr("fill", "#667085")
+        .attr("font-size", 13)
+        .text("Globalna prodaja, milijuni, log skala");
+
+      const points = g.selectAll(".point")
+        .data(sample, d => `${d.name}-${d.platform}-${d.year}`);
+
+      points.exit()
+        .transition()
+        .duration(450)
+        .attr("r", 0)
+        .style("opacity", 0)
+        .remove();
+
+      points.enter()
+        .append("circle")
+        .attr("class", "point")
+        .attr("cx", d => x(d.userScore))
+        .attr("cy", innerHeight)
+        .attr("r", 0)
+        .attr("fill", d => color(d.genre))
+        .attr("fill-opacity", 0.72)
+        .attr("stroke", "#ffffff")
+        .attr("stroke-width", 1)
+        .on("mousemove", (event, d) => showTooltip(event, `
+          <strong>${d.name}</strong><br/>
+          Platforma: ${d.platform}<br/>
+          Žanr: ${d.genre}<br/>
+          Godina: ${d.year}<br/>
+          Globalna prodaja: ${formatSales(d.globalSales)} mil.<br/>
+          User score: ${d.userScore}<br/>
+          Critic score: ${d.criticScore}
+        `))
+        .on("mouseleave", hideTooltip)
+        .on("click", (event, d) => {
+          state.selectedBarGenre = d.genre;
+          renderAll();
+        })
+        .merge(points)
+        .classed("faded", d => state.selectedBarGenre && d.genre !== state.selectedBarGenre)
+        .transition()
+        .duration(850)
+        .attr("cx", d => x(d.userScore))
+        .attr("cy", d => y(Math.max(d.globalSales, 0.01)))
+        .attr("r", d => r(d.criticScore || 1))
+        .attr("fill", d => color(d.genre));
+    }
+
+    function toggleAnimation() {
+      const button = d3.select("#playButton");
+
+      if (state.isPlaying) {
+        stopAnimation();
+        return;
+      }
+
+      const minYear = +d3.select("#yearMin").property("value");
+      const maxYear = +d3.select("#yearMax").property("value");
+      let currentYear = minYear;
+
+      state.isPlaying = true;
+      state.selectedYearRange = null;
+      button.text("Zaustavi animaciju");
+
+      state.animationTimer = d3.interval(() => {
+        state.activeAnimationYear = currentYear;
+        renderAll();
+
+        currentYear += 1;
+
+        if (currentYear > maxYear) {
+          stopAnimation();
+        }
+      }, 850);
+    }
+
+    function stopAnimation() {
+      if (state.animationTimer) {
+        state.animationTimer.stop();
+      }
+
+      state.isPlaying = false;
+      d3.select("#playButton").text("Pokreni animaciju");
+    }
+
+    function loadData() {
+      d3.csv(CSV_FILE, parseRow)
+        .then(data => {
+          state.rawData = data.filter(d =>
+            d.name &&
+            d.platform &&
+            d.genre &&
+            Number.isFinite(d.year) &&
+            Number.isFinite(d.globalSales)
+          );
+
+          initControls(state.rawData);
+          applyFiltersAndRender();
+
+        })
+        .catch(error => {
+          console.error(error);
+        });
+    }
+
+    loadData();
+  </script>
+</body>
+</html>

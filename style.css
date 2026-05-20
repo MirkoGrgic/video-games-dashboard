@@ -1,0 +1,427 @@
+:root {
+      --bg: #ffffff;
+      --text: #172033;
+      --muted: #667085;
+      --card: #ffffff;
+      --border: #e6eaf0;
+      --grid: #e9edf3;
+      --accent: #2563eb;
+      --accent-soft: #dbeafe;
+      --accent-2: #16a34a;
+      --danger: #dc2626;
+      --shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .navbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: rgba(255, 255, 255, 0.96);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 18px 28px;
+    }
+
+    .navbar-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      align-items: flex-start;
+      margin-bottom: 16px;
+    }
+
+    .title-wrap h1 {
+      margin: 0;
+      font-size: 26px;
+      letter-spacing: -0.03em;
+    }
+
+    .title-wrap p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .status {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 13px;
+      white-space: nowrap;
+      margin-top: 7px;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: var(--accent-2);
+      box-shadow: 0 0 0 5px rgba(22, 163, 74, 0.12);
+    }
+
+    .filters {
+      display: grid;
+      grid-template-columns: 1.15fr 1.15fr 0.75fr 0.75fr 1fr auto auto auto;
+      gap: 12px;
+      align-items: end;
+    }
+
+    label {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+
+    select,
+    input {
+      width: 100%;
+      border: 1px solid var(--border);
+      background: #fff;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 14px;
+      outline: none;
+      transition: border 0.2s, box-shadow 0.2s;
+    }
+
+    select:focus,
+    input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px var(--accent-soft);
+    }
+
+    .custom-select {
+      position: relative;
+    }
+
+    .dropdown-button {
+      width: 100%;
+      min-height: 42px;
+      border: 1px solid var(--border);
+      background: #fff;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 14px;
+      outline: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--text);
+      cursor: pointer;
+      transition: border 0.2s, box-shadow 0.2s;
+    }
+
+    .dropdown-button:hover,
+    .dropdown-button.active {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px var(--accent-soft);
+      transform: none;
+    }
+
+    .dropdown-button span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 700;
+    }
+
+    .dropdown-button::after {
+      content: "▾";
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .dropdown-menu {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      right: 0;
+      z-index: 40;
+      display: none;
+      max-height: 280px;
+      overflow-y: auto;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.14);
+      padding: 8px;
+    }
+
+    .dropdown-menu.open {
+      display: block;
+    }
+
+    .dropdown-option {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      cursor: pointer;
+      color: var(--text);
+      font-size: 14px;
+      text-transform: none;
+      letter-spacing: 0;
+      margin: 0;
+      font-weight: 600;
+    }
+
+    .dropdown-option:hover {
+      background: #f8fafc;
+    }
+
+    .dropdown-option input {
+      width: auto;
+      accent-color: var(--accent);
+      padding: 0;
+    }
+
+    .dropdown-divider {
+      height: 1px;
+      background: var(--border);
+      margin: 6px 0;
+    }
+
+    button {
+      border: none;
+      border-radius: 12px;
+      padding: 11px 16px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+      white-space: nowrap;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 24px rgba(37, 99, 235, 0.18);
+    }
+
+    .primary {
+      background: var(--accent);
+      color: white;
+    }
+
+    .secondary {
+      background: #f1f5f9;
+      color: #0f172a;
+    }
+
+    .dashboard {
+      padding: 28px;
+      max-width: 1320px;
+      margin: 0 auto;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 22px;
+    }
+
+    .metric {
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      background: var(--card);
+      padding: 18px;
+      box-shadow: var(--shadow);
+    }
+
+    .metric .label {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .metric .value {
+      margin-top: 8px;
+      font-size: 30px;
+      font-weight: 900;
+      letter-spacing: -0.04em;
+    }
+
+    .metric .note {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .chart-card {
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      background: var(--card);
+      padding: 22px;
+      margin-bottom: 26px;
+      box-shadow: var(--shadow);
+    }
+
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-start;
+      margin-bottom: 10px;
+    }
+
+    .chart-title h2 {
+      margin: 0;
+      font-size: 21px;
+      letter-spacing: -0.03em;
+    }
+
+    .chart-title p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .chart-actions {
+      color: var(--muted);
+      font-size: 13px;
+      text-align: right;
+      max-width: 340px;
+    }
+
+    svg {
+      width: 100%;
+      height: auto;
+      display: block;
+      overflow: visible;
+    }
+
+    .axis text {
+      fill: var(--muted);
+      font-size: 12px;
+    }
+
+    .axis path,
+    .axis line {
+      stroke: #cbd5e1;
+    }
+
+    .grid line {
+      stroke: var(--grid);
+      stroke-dasharray: 3 3;
+    }
+
+    .grid path {
+      display: none;
+    }
+
+    .tooltip {
+      position: fixed;
+      pointer-events: none;
+      background: rgba(15, 23, 42, 0.95);
+      color: white;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 13px;
+      line-height: 1.45;
+      opacity: 0;
+      transform: translate(-50%, -110%);
+      transition: opacity 0.12s;
+      max-width: 260px;
+      z-index: 50;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 16px;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .legend-color {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      display: inline-block;
+    }
+
+    .brush-info {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .bar,
+    .point,
+    .line-path {
+      cursor: pointer;
+    }
+
+    .selected {
+      stroke: #0f172a;
+      stroke-width: 2.5;
+    }
+
+    .faded {
+      opacity: 0.18;
+    }
+
+
+    @media (max-width: 1100px) {
+      .filters {
+        grid-template-columns: repeat(4, 1fr);
+      }
+
+      .summary-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .navbar-top {
+        flex-direction: column;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .filters,
+      .summary-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .dashboard,
+      .navbar {
+        padding-left: 16px;
+        padding-right: 16px;
+      }
+    }
+
+    .reset {
+      background: #fff;
+      color: var(--danger);
+      border: 1px solid #fecaca;
+    }
+
+    .reset:hover {
+      box-shadow: 0 10px 24px rgba(220, 38, 38, 0.12);
+    }
